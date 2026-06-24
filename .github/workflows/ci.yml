@@ -126,46 +126,20 @@ jobs:
         with:
           submodules: recursive
 
-      # Install Foundry so forge is on PATH inside this runner.
-      # The slither-action runs in a Docker container that shares the workspace
-      # volume but does NOT inherit the runner's PATH, so it cannot call forge
-      # directly.  Instead we run forge build here (on the runner) to populate
-      # the out/ directory, then tell Slither to reuse those artifacts with
-      # --foundry-ignore-compile.  Without this step, out/ is empty on a fresh
-      # runner and Slither fails trying to find compilation outputs.
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Build contracts (populate out/ for Slither)
-        run: forge build
-
       # ── Slither action ────────────────────────────────────────────────────────
-      # target: "src/" — scan only our contracts, not the lib/ dependencies.
+      # The crytic/slither-action Docker container installs its own copy of
+      # foundry (via foundryup) and compiles the project internally.  We do
+      # NOT need to pre-build on the runner or pass --foundry-ignore-compile;
+      # doing so caused crytic-compile to try to parse existing out/build-info/
+      # artifacts via hardhat_like_parsing and crash (KeyError: 'output').
       #
-      # slither-args: "--foundry-ignore-compile" — tells crytic-compile (the
-      # compilation layer inside Slither) to use the Foundry artifacts already
-      # in out/ instead of trying to invoke forge itself.  This avoids the
-      # "forge not found" error that would otherwise occur because the Docker
-      # container running Slither has its own isolated filesystem and cannot
-      # see the forge binary installed by foundry-toolchain on the host runner.
-      #
-      # fail-on: "none" — findings appear in the log but never fail the job.
-      # Rationale: Slither flags informational patterns (including the
-      # block.timestamp comparisons we deliberately use and document).  Once
-      # you have reviewed findings and suppressed known false-positives with a
-      # slither.config.json, bump this to "medium" or "high".
+      # target: "." — project root so crytic-compile finds foundry.toml.
+      # --filter-paths lib — exclude OpenZeppelin / forge-std from findings.
+      # fail-on: "none" — findings appear in log but never fail the job.
       - name: Run Slither
         uses: crytic/slither-action@v0.4.1
         with:
-          # target must be "." (the project root) so crytic-compile can find
-          # foundry.toml and use the Foundry parsing path.  When target is
-          # "src/", crytic-compile searches for foundry.toml inside src/,
-          # finds nothing, falls back to Hardhat-like parsing, and crashes on
-          # the different JSON structure in out/build-info/ (KeyError: 'output').
           target: "."
           node-version: "24"
-          # --foundry-ignore-compile: reuse the out/ artifacts from forge build
-          # --filter-paths lib:       exclude lib/ (dependencies) from findings;
-          #                           equivalent to the old target:"src/" intent
-          slither-args: "--foundry-ignore-compile --filter-paths lib"
+          slither-args: "--filter-paths lib"
           fail-on: "none"

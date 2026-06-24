@@ -38,7 +38,7 @@ jobs:
       # Without this flag, GitHub clones the outer repo only and leaves those
       # directories empty, causing every import to fail at compile time.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
         with:
           submodules: recursive
 
@@ -85,7 +85,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
         with:
           submodules: recursive
 
@@ -122,36 +122,42 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
         with:
           submodules: recursive
 
-      # Slither resolves imports via the same remappings Foundry uses, so it
-      # needs the submodules present and the foundry.toml remappings config.
-      - name: Install Foundry (for remappings resolution)
+      # Install Foundry so forge is on PATH inside this runner.
+      # The slither-action runs in a Docker container that shares the workspace
+      # volume but does NOT inherit the runner's PATH, so it cannot call forge
+      # directly.  Instead we run forge build here (on the runner) to populate
+      # the out/ directory, then tell Slither to reuse those artifacts with
+      # --foundry-ignore-compile.  Without this step, out/ is empty on a fresh
+      # runner and Slither fails trying to find compilation outputs.
+      - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Build contracts (populate out/ for Slither)
+        run: forge build
+
       # ── Slither action ────────────────────────────────────────────────────────
-      # node-version: slither-action installs solc-select internally; Node is
-      # needed for certain helper scripts bundled with the action.
+      # target: "src/" — scan only our contracts, not the lib/ dependencies.
       #
-      # target: "src/" — scan our contracts, not the dependencies in lib/.
+      # slither-args: "--foundry-ignore-compile" — tells crytic-compile (the
+      # compilation layer inside Slither) to use the Foundry artifacts already
+      # in out/ instead of trying to invoke forge itself.  This avoids the
+      # "forge not found" error that would otherwise occur because the Docker
+      # container running Slither has its own isolated filesystem and cannot
+      # see the forge binary installed by foundry-toolchain on the host runner.
       #
-      # slither-args: "--foundry-ignore-compile" tells Slither to re-use the
-      # Foundry compilation artifacts from forge's cache rather than compiling
-      # again with its own compiler wrapper. This makes the scan faster and
-      # avoids version-mismatch errors.
-      #
-      # fail-on: "none" — Slither findings are REPORTED in the log but do NOT
-      # fail the CI job. Rationale: Slither often flags OpenZeppelin internals
-      # and intentional patterns (e.g. "block.timestamp used for comparison")
-      # as informational findings. We document the timestamp assumption in the
-      # contract already. Bumping this to "medium" or "high" once you have
-      # reviewed and suppressed known false-positives is a good next step.
+      # fail-on: "none" — findings appear in the log but never fail the job.
+      # Rationale: Slither flags informational patterns (including the
+      # block.timestamp comparisons we deliberately use and document).  Once
+      # you have reviewed findings and suppressed known false-positives with a
+      # slither.config.json, bump this to "medium" or "high".
       - name: Run Slither
         uses: crytic/slither-action@v0.4.1
         with:
           target: "src/"
-          node-version: "20"
+          node-version: "24"
           slither-args: "--foundry-ignore-compile"
           fail-on: "none"

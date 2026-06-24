@@ -2,10 +2,10 @@
 pragma solidity 0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
-import {StdInvariant}  from "forge-std/StdInvariant.sol";
-import {CommonBase}    from "forge-std/Base.sol";
-import {StdCheats}     from "forge-std/StdCheats.sol";
-import {StdUtils}      from "forge-std/StdUtils.sol";
+import {StdInvariant} from "forge-std/StdInvariant.sol";
+import {CommonBase} from "forge-std/Base.sol";
+import {StdCheats} from "forge-std/StdCheats.sol";
+import {StdUtils} from "forge-std/StdUtils.sol";
 
 import {RockPaperScissors as RPS} from "../src/RockPaperScissors.sol";
 
@@ -16,7 +16,7 @@ contract RPSBase is Test {
     RPS internal rps;
 
     address internal alice = makeAddr("alice");
-    address internal bob   = makeAddr("bob");
+    address internal bob = makeAddr("bob");
     address internal carol = makeAddr("carol");
 
     uint256 internal constant STAKE = 1 ether;
@@ -24,27 +24,20 @@ contract RPSBase is Test {
     function setUp() public virtual {
         rps = new RPS();
         vm.deal(alice, 100 ether);
-        vm.deal(bob,   100 ether);
+        vm.deal(bob, 100 ether);
         vm.deal(carol, 100 ether);
     }
 
     // ── Commitment helpers ────────────────────────────────────────────────────
 
-    function _commit(RPS.Move move, bytes32 salt, address player)
-        internal
-        pure
-        returns (bytes32)
-    {
+    function _commit(RPS.Move move, bytes32 salt, address player) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(move, salt, player));
     }
 
     // ── Scenario shortcuts ────────────────────────────────────────────────────
 
     /// Creates a match as Alice with default STAKE.  Returns matchId.
-    function _aliceCreates(bytes32 salt, RPS.Move move)
-        internal
-        returns (uint256 matchId)
-    {
+    function _aliceCreates(bytes32 salt, RPS.Move move) internal returns (uint256 matchId) {
         vm.prank(alice);
         matchId = rps.createMatch{value: STAKE}(_commit(move, salt, alice));
     }
@@ -56,11 +49,9 @@ contract RPSBase is Test {
     }
 
     /// Both players reveal.
-    function _reveal(
-        uint256 matchId,
-        RPS.Move aliceMove, bytes32 aliceSalt,
-        RPS.Move bobMove,   bytes32 bobSalt
-    ) internal {
+    function _reveal(uint256 matchId, RPS.Move aliceMove, bytes32 aliceSalt, RPS.Move bobMove, bytes32 bobSalt)
+        internal
+    {
         vm.prank(alice);
         rps.reveal(matchId, aliceMove, aliceSalt);
         vm.prank(bob);
@@ -68,10 +59,10 @@ contract RPSBase is Test {
     }
 
     /// Full happy-path: create → join → both reveal.  Returns matchId.
-    function _fullMatch(
-        RPS.Move aliceMove, bytes32 aliceSalt,
-        RPS.Move bobMove,   bytes32 bobSalt
-    ) internal returns (uint256 matchId) {
+    function _fullMatch(RPS.Move aliceMove, bytes32 aliceSalt, RPS.Move bobMove, bytes32 bobSalt)
+        internal
+        returns (uint256 matchId)
+    {
         matchId = _aliceCreates(aliceSalt, aliceMove);
         _bobJoins(matchId, bobSalt, bobMove);
         _reveal(matchId, aliceMove, aliceSalt, bobMove, bobSalt);
@@ -94,9 +85,9 @@ contract RPS_CreateMatch_Test is RPSBase {
         assertEq(id, 0, "first matchId should be 0");
 
         RPS.Match memory m = rps.getMatch(id);
-        assertEq(m.player1,    alice);
-        assertEq(m.player2,    address(0));
-        assertEq(m.stake,      STAKE);
+        assertEq(m.player1, alice);
+        assertEq(m.player2, address(0));
+        assertEq(m.stake, STAKE);
         assertEq(m.commitment1, commitment);
         assertEq(uint8(m.state), uint8(RPS.MatchState.Created));
         assertEq(m.joinDeadline, block.timestamp + rps.JOIN_TIMEOUT());
@@ -186,25 +177,19 @@ contract RPS_JoinMatch_Test is RPSBase {
         rps.joinMatch{value: STAKE}(matchId, _commit(RPS.Move.Rock, "bs", bob));
         // Try to join again
         vm.prank(carol);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Active)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Active));
         rps.joinMatch{value: STAKE}(matchId, _commit(RPS.Move.Rock, "cs", carol));
     }
 
     function test_JoinMatch_WrongStake_Reverts() public {
         vm.prank(bob);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongStake.selector, STAKE + 1, STAKE)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongStake.selector, STAKE + 1, STAKE));
         rps.joinMatch{value: STAKE + 1}(matchId, _commit(RPS.Move.Rock, "bs", bob));
     }
 
     function test_JoinMatch_ZeroStake_Reverts() public {
         vm.prank(bob);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongStake.selector, 0, STAKE)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongStake.selector, 0, STAKE));
         rps.joinMatch{value: 0}(matchId, _commit(RPS.Move.Rock, "bs", bob));
     }
 
@@ -236,7 +221,7 @@ contract RPS_JoinMatch_Test is RPSBase {
 
 contract RPS_Reveal_Test is RPSBase {
     bytes32 internal aliceSalt = "aliceSalt";
-    bytes32 internal bobSalt   = "bobSalt";
+    bytes32 internal bobSalt = "bobSalt";
     uint256 internal matchId;
 
     function setUp() public override {
@@ -250,8 +235,10 @@ contract RPS_Reveal_Test is RPSBase {
     function _runOutcome(
         RPS.Move aliceMove,
         RPS.Move bobMove,
-        address expectedWinner  // address(0) for tie
-    ) internal {
+        address expectedWinner // address(0) for tie
+    )
+        internal
+    {
         // Each outcome needs a fresh contract.
         setUp();
         matchId = _aliceCreates(aliceSalt, aliceMove);
@@ -275,30 +262,54 @@ contract RPS_Reveal_Test is RPSBase {
         if (expectedWinner == address(0)) {
             // Tie: both recover their own stake
             assertEq(rps.pendingWithdrawals(alice), STAKE);
-            assertEq(rps.pendingWithdrawals(bob),   STAKE);
+            assertEq(rps.pendingWithdrawals(bob), STAKE);
         } else if (expectedWinner == alice) {
             assertEq(rps.pendingWithdrawals(alice), 2 * STAKE);
-            assertEq(rps.pendingWithdrawals(bob),   0);
+            assertEq(rps.pendingWithdrawals(bob), 0);
         } else {
-            assertEq(rps.pendingWithdrawals(bob),   2 * STAKE);
+            assertEq(rps.pendingWithdrawals(bob), 2 * STAKE);
             assertEq(rps.pendingWithdrawals(alice), 0);
         }
     }
 
     // P1 wins (3 cases)
-    function test_Reveal_RockBeatsScissors_P1Wins()     public { _runOutcome(RPS.Move.Rock,     RPS.Move.Scissors, alice); }
-    function test_Reveal_ScissorsBeatsPaper_P1Wins()    public { _runOutcome(RPS.Move.Scissors, RPS.Move.Paper,    alice); }
-    function test_Reveal_PaperBeatsRock_P1Wins()        public { _runOutcome(RPS.Move.Paper,    RPS.Move.Rock,     alice); }
+    function test_Reveal_RockBeatsScissors_P1Wins() public {
+        _runOutcome(RPS.Move.Rock, RPS.Move.Scissors, alice);
+    }
+
+    function test_Reveal_ScissorsBeatsPaper_P1Wins() public {
+        _runOutcome(RPS.Move.Scissors, RPS.Move.Paper, alice);
+    }
+
+    function test_Reveal_PaperBeatsRock_P1Wins() public {
+        _runOutcome(RPS.Move.Paper, RPS.Move.Rock, alice);
+    }
 
     // P2 wins (3 cases)
-    function test_Reveal_ScissorsBeatRock_P2Wins()      public { _runOutcome(RPS.Move.Rock,     RPS.Move.Paper,    bob);   }
-    function test_Reveal_PaperBeatsScissors_P2Wins()    public { _runOutcome(RPS.Move.Scissors, RPS.Move.Rock,     bob);   }
-    function test_Reveal_RockBeatsScissors_P2Wins()     public { _runOutcome(RPS.Move.Paper,    RPS.Move.Scissors, bob);   }
+    function test_Reveal_ScissorsBeatRock_P2Wins() public {
+        _runOutcome(RPS.Move.Rock, RPS.Move.Paper, bob);
+    }
+
+    function test_Reveal_PaperBeatsScissors_P2Wins() public {
+        _runOutcome(RPS.Move.Scissors, RPS.Move.Rock, bob);
+    }
+
+    function test_Reveal_RockBeatsScissors_P2Wins() public {
+        _runOutcome(RPS.Move.Paper, RPS.Move.Scissors, bob);
+    }
 
     // Ties (3 cases)
-    function test_Reveal_RockRock_Tie()       public { _runOutcome(RPS.Move.Rock,     RPS.Move.Rock,     address(0)); }
-    function test_Reveal_PaperPaper_Tie()     public { _runOutcome(RPS.Move.Paper,    RPS.Move.Paper,    address(0)); }
-    function test_Reveal_ScissorsScissors_Tie() public { _runOutcome(RPS.Move.Scissors, RPS.Move.Scissors, address(0)); }
+    function test_Reveal_RockRock_Tie() public {
+        _runOutcome(RPS.Move.Rock, RPS.Move.Rock, address(0));
+    }
+
+    function test_Reveal_PaperPaper_Tie() public {
+        _runOutcome(RPS.Move.Paper, RPS.Move.Paper, address(0));
+    }
+
+    function test_Reveal_ScissorsScissors_Tie() public {
+        _runOutcome(RPS.Move.Scissors, RPS.Move.Scissors, address(0));
+    }
 
     // ── state transitions ─────────────────────────────────────────────────────
 
@@ -341,7 +352,7 @@ contract RPS_Reveal_Test is RPSBase {
     function test_Reveal_WrongMove_Reverts() public {
         vm.prank(alice);
         vm.expectRevert(RPS.CommitMismatch.selector);
-        rps.reveal(matchId, RPS.Move.Paper, aliceSalt);  // committed Rock
+        rps.reveal(matchId, RPS.Move.Paper, aliceSalt); // committed Rock
     }
 
     function test_Reveal_WrongSalt_Reverts() public {
@@ -381,9 +392,7 @@ contract RPS_Reveal_Test is RPSBase {
         // A new match that hasn't been joined yet
         uint256 newId = _aliceCreates("salt2", RPS.Move.Rock);
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Created)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Created));
         rps.reveal(newId, RPS.Move.Rock, "salt2");
     }
 
@@ -444,9 +453,7 @@ contract RPS_Cancel_Test is RPSBase {
         _bobJoins(matchId, "bobSalt", RPS.Move.Scissors);
         vm.warp(block.timestamp + rps.JOIN_TIMEOUT() + 1);
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Active)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Active));
         rps.cancelMatch(matchId);
     }
 
@@ -468,7 +475,7 @@ contract RPS_Cancel_Test is RPSBase {
 
 contract RPS_ResolveExpired_Test is RPSBase {
     bytes32 internal aliceSalt = "aliceSalt";
-    bytes32 internal bobSalt   = "bobSalt";
+    bytes32 internal bobSalt = "bobSalt";
     uint256 internal matchId;
 
     function setUp() public override {
@@ -488,11 +495,11 @@ contract RPS_ResolveExpired_Test is RPSBase {
         vm.expectEmit(true, true, false, true);
         emit RPS.MatchResolved(matchId, alice, RPS.Move.Rock, RPS.Move.None);
 
-        rps.resolveExpired(matchId);  // anyone can call
+        rps.resolveExpired(matchId); // anyone can call
 
         assertEq(uint8(rps.getMatch(matchId).state), uint8(RPS.MatchState.Resolved));
         assertEq(rps.pendingWithdrawals(alice), 2 * STAKE);
-        assertEq(rps.pendingWithdrawals(bob),   0);
+        assertEq(rps.pendingWithdrawals(bob), 0);
     }
 
     function test_ResolveExpired_P2Revealed_P2Wins() public {
@@ -504,7 +511,7 @@ contract RPS_ResolveExpired_Test is RPSBase {
         emit RPS.MatchResolved(matchId, bob, RPS.Move.None, RPS.Move.Scissors);
         rps.resolveExpired(matchId);
 
-        assertEq(rps.pendingWithdrawals(bob),   2 * STAKE);
+        assertEq(rps.pendingWithdrawals(bob), 2 * STAKE);
         assertEq(rps.pendingWithdrawals(alice), 0);
     }
 
@@ -520,7 +527,7 @@ contract RPS_ResolveExpired_Test is RPSBase {
 
         assertEq(uint8(rps.getMatch(matchId).state), uint8(RPS.MatchState.Cancelled));
         assertEq(rps.pendingWithdrawals(alice), STAKE);
-        assertEq(rps.pendingWithdrawals(bob),   STAKE);
+        assertEq(rps.pendingWithdrawals(bob), STAKE);
     }
 
     function test_ResolveExpired_NeitherRevealed_BothCanWithdraw() public {
@@ -528,13 +535,15 @@ contract RPS_ResolveExpired_Test is RPSBase {
         rps.resolveExpired(matchId);
 
         uint256 aliceBefore = alice.balance;
-        uint256 bobBefore   = bob.balance;
+        uint256 bobBefore = bob.balance;
 
-        vm.prank(alice); rps.withdraw();
-        vm.prank(bob);   rps.withdraw();
+        vm.prank(alice);
+        rps.withdraw();
+        vm.prank(bob);
+        rps.withdraw();
 
         assertEq(alice.balance, aliceBefore + STAKE);
-        assertEq(bob.balance,   bobBefore   + STAKE);
+        assertEq(bob.balance, bobBefore + STAKE);
     }
 
     // ── callable by anyone ────────────────────────────────────────────────────
@@ -544,7 +553,7 @@ contract RPS_ResolveExpired_Test is RPSBase {
         rps.reveal(matchId, RPS.Move.Rock, aliceSalt);
         vm.warp(rps.getMatch(matchId).revealDeadline + 1);
 
-        vm.prank(carol);  // third party settles
+        vm.prank(carol); // third party settles
         rps.resolveExpired(matchId);
 
         assertEq(rps.pendingWithdrawals(alice), 2 * STAKE);
@@ -562,18 +571,14 @@ contract RPS_ResolveExpired_Test is RPSBase {
     function test_ResolveExpired_AlreadyResolved_Reverts() public {
         _reveal(matchId, RPS.Move.Rock, aliceSalt, RPS.Move.Scissors, bobSalt);
         vm.warp(rps.getMatch(matchId).revealDeadline + 1);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Resolved)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Resolved));
         rps.resolveExpired(matchId);
     }
 
     function test_ResolveExpired_WrongState_Created_Reverts() public {
         uint256 newId = _aliceCreates("s2", RPS.Move.Rock);
         vm.warp(block.timestamp + rps.REVEAL_TIMEOUT() + 1);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Created)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Created));
         rps.resolveExpired(newId);
     }
 
@@ -586,16 +591,14 @@ contract RPS_ResolveExpired_Test is RPSBase {
     function test_ResolveExpired_DoubleCall_Reverts() public {
         vm.warp(rps.getMatch(matchId).revealDeadline + 1);
         rps.resolveExpired(matchId);
-        vm.expectRevert(
-            abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Cancelled)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RPS.WrongState.selector, RPS.MatchState.Cancelled));
         rps.resolveExpired(matchId);
     }
 }
 
 contract RPS_Withdraw_Test is RPSBase {
     bytes32 internal aliceSalt = "aliceSalt";
-    bytes32 internal bobSalt   = "bobSalt";
+    bytes32 internal bobSalt = "bobSalt";
 
     function test_Withdraw_WinnerReceivesFullPot() public {
         uint256 id = _fullMatch(RPS.Move.Rock, aliceSalt, RPS.Move.Scissors, bobSalt);
@@ -614,13 +617,15 @@ contract RPS_Withdraw_Test is RPSBase {
         _fullMatch(RPS.Move.Rock, aliceSalt, RPS.Move.Rock, bobSalt);
 
         uint256 aliceBefore = alice.balance;
-        uint256 bobBefore   = bob.balance;
+        uint256 bobBefore = bob.balance;
 
-        vm.prank(alice); rps.withdraw();
-        vm.prank(bob);   rps.withdraw();
+        vm.prank(alice);
+        rps.withdraw();
+        vm.prank(bob);
+        rps.withdraw();
 
         assertEq(alice.balance, aliceBefore + STAKE);
-        assertEq(bob.balance,   bobBefore   + STAKE);
+        assertEq(bob.balance, bobBefore + STAKE);
         assertEq(address(rps).balance, 0);
     }
 
@@ -663,9 +668,7 @@ contract RPS_Withdraw_Test is RPSBase {
         // Attacker creates a match against bob (Alice's role here)
         bytes32 attackerSalt = "attackerSalt";
         vm.prank(address(attacker));
-        uint256 id = rps.createMatch{value: STAKE}(
-            _commit(RPS.Move.Rock, attackerSalt, address(attacker))
-        );
+        uint256 id = rps.createMatch{value: STAKE}(_commit(RPS.Move.Rock, attackerSalt, address(attacker)));
 
         // bob joins
         vm.prank(bob);
@@ -689,11 +692,13 @@ contract RPS_Withdraw_Test is RPSBase {
 // Reentrancy helper
 // ─────────────────────────────────────────────────────────────────────────────
 contract ReentrantWithdrawer {
-    RPS     private rps;
-    bool    private _attacking;
+    RPS private rps;
+    bool private _attacking;
     uint256 private _count;
 
-    constructor(RPS _rps) { rps = _rps; }
+    constructor(RPS _rps) {
+        rps = _rps;
+    }
 
     function reveal(uint256 matchId, RPS.Move move, bytes32 salt) external {
         rps.reveal(matchId, move, salt);
@@ -707,7 +712,7 @@ contract ReentrantWithdrawer {
     receive() external payable {
         if (_attacking && _count < 3) {
             _count++;
-            try rps.withdraw() {} catch {}  // should revert each time
+            try rps.withdraw() {} catch {} // should revert each time
         }
     }
 }
@@ -728,23 +733,22 @@ contract RPS_Fuzz_Test is RPSBase {
         _fullMatch(m1, s1, m2, s2);
 
         uint256 alicePending = rps.pendingWithdrawals(alice);
-        uint256 bobPending   = rps.pendingWithdrawals(bob);
+        uint256 bobPending = rps.pendingWithdrawals(bob);
 
         if (m1 == m2) {
             // Tie
             assertEq(alicePending, STAKE);
-            assertEq(bobPending,   STAKE);
+            assertEq(bobPending, STAKE);
         } else if (
-            (m1 == RPS.Move.Rock     && m2 == RPS.Move.Scissors) ||
-            (m1 == RPS.Move.Scissors && m2 == RPS.Move.Paper)    ||
-            (m1 == RPS.Move.Paper    && m2 == RPS.Move.Rock)
+            (m1 == RPS.Move.Rock && m2 == RPS.Move.Scissors) || (m1 == RPS.Move.Scissors && m2 == RPS.Move.Paper)
+                || (m1 == RPS.Move.Paper && m2 == RPS.Move.Rock)
         ) {
             // Alice wins
             assertEq(alicePending, 2 * STAKE);
-            assertEq(bobPending,   0);
+            assertEq(bobPending, 0);
         } else {
             // Bob wins
-            assertEq(bobPending,   2 * STAKE);
+            assertEq(bobPending, 2 * STAKE);
             assertEq(alicePending, 0);
         }
 
@@ -783,7 +787,7 @@ contract RPS_Fuzz_Test is RPSBase {
     function testFuzz_StakeAmount_MustMatch(uint256 stake) public {
         stake = bound(stake, 1, 100 ether);
         vm.deal(alice, stake * 2);
-        vm.deal(bob,   stake * 2);
+        vm.deal(bob, stake * 2);
 
         bytes32 s1 = "s1";
         bytes32 s2 = "s2";
@@ -794,9 +798,7 @@ contract RPS_Fuzz_Test is RPSBase {
         // Sending stake ± 1 should fail
         if (stake > 1) {
             vm.prank(bob);
-            vm.expectRevert(
-                abi.encodeWithSelector(RPS.WrongStake.selector, stake - 1, stake)
-            );
+            vm.expectRevert(abi.encodeWithSelector(RPS.WrongStake.selector, stake - 1, stake));
             rps.joinMatch{value: stake - 1}(id, _commit(RPS.Move.Scissors, s2, bob));
         }
 
@@ -832,14 +834,14 @@ contract RPS_Fuzz_Test is RPSBase {
     }
 
     // Multiple concurrent matches: balances remain independent
-    function testFuzz_MultipleMatches_BalancesIndependent(
-        uint8 m1Seed, uint8 m2Seed
-    ) public {
+    function testFuzz_MultipleMatches_BalancesIndependent(uint8 m1Seed, uint8 m2Seed) public {
         RPS.Move m1 = RPS.Move(bound(m1Seed, 1, 3));
         RPS.Move m2 = RPS.Move(bound(m2Seed, 1, 3));
 
-        bytes32 s1a = "s1a"; bytes32 s1b = "s1b";
-        bytes32 s2a = "s2a"; bytes32 s2b = "s2b";
+        bytes32 s1a = "s1a";
+        bytes32 s1b = "s1b";
+        bytes32 s2a = "s2a";
+        bytes32 s2b = "s2b";
 
         // Two parallel matches
         uint256 idA = _aliceCreates(s1a, m1);
@@ -859,13 +861,13 @@ contract RPS_Fuzz_Test is RPSBase {
         _reveal(idA, m1, s1a, m2, s1b);
 
         // Reveal match B
-        vm.prank(carol);  rps.reveal(idB, m1, s2a);
-        vm.prank(alice);  rps.reveal(idB, m2, s2b);
+        vm.prank(carol);
+        rps.reveal(idB, m1, s2a);
+        vm.prank(alice);
+        rps.reveal(idB, m2, s2b);
 
         // All stakes accounted for
-        uint256 total = rps.pendingWithdrawals(alice)
-                      + rps.pendingWithdrawals(bob)
-                      + rps.pendingWithdrawals(carol);
+        uint256 total = rps.pendingWithdrawals(alice) + rps.pendingWithdrawals(bob) + rps.pendingWithdrawals(carol);
         assertEq(total, 4 * STAKE);
         assertEq(address(rps).balance, 4 * STAKE); // still in contract until withdrawn
     }
@@ -885,10 +887,13 @@ contract RPS_Handler is CommonBase, StdCheats, StdUtils {
 
     // Track match meta-data the contract doesn't expose directly
     struct MatchInfo {
-        address p1; address p2;
-        RPS.Move move1; RPS.Move move2;
-        bytes32 salt1;  bytes32 salt2;
-        bool    joined;
+        address p1;
+        address p2;
+        RPS.Move move1;
+        RPS.Move move2;
+        bytes32 salt1;
+        bytes32 salt2;
+        bool joined;
     }
     mapping(uint256 => MatchInfo) public info;
     uint256[] public matchIds;
@@ -910,16 +915,11 @@ contract RPS_Handler is CommonBase, StdCheats, StdUtils {
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
-    function createMatch(
-        uint256 actorSeed,
-        uint256 stakeSeed,
-        uint8   moveSeed,
-        uint256 saltSeed
-    ) external {
+    function createMatch(uint256 actorSeed, uint256 stakeSeed, uint8 moveSeed, uint256 saltSeed) external {
         address actor = actors[actorSeed % actors.length];
         uint256 stake = bound(stakeSeed, 0.001 ether, 10 ether);
         RPS.Move move = RPS.Move(bound(moveSeed, 1, 3));
-        bytes32 salt  = bytes32(saltSeed ^ uint256(uint160(actor)));
+        bytes32 salt = bytes32(saltSeed ^ uint256(uint160(actor)));
 
         if (actor.balance < stake) return;
 
@@ -933,20 +933,15 @@ contract RPS_Handler is CommonBase, StdCheats, StdUtils {
         ghost_deposited += stake;
     }
 
-    function joinMatch(
-        uint256 matchSeed,
-        uint256 actorSeed,
-        uint8   moveSeed,
-        uint256 saltSeed
-    ) external {
+    function joinMatch(uint256 matchSeed, uint256 actorSeed, uint8 moveSeed, uint256 saltSeed) external {
         if (matchIds.length == 0) return;
-        uint256 id  = matchIds[matchSeed % matchIds.length];
+        uint256 id = matchIds[matchSeed % matchIds.length];
         MatchInfo storage mi = info[id];
         if (mi.joined) return;
 
         RPS.Match memory m = rps.getMatch(id);
         if (m.state != RPS.MatchState.Created) return;
-        if (block.timestamp > m.joinDeadline)  return;
+        if (block.timestamp > m.joinDeadline) return;
 
         // Pick an actor that isn't player1
         address actor = actors[actorSeed % actors.length];
@@ -955,12 +950,12 @@ contract RPS_Handler is CommonBase, StdCheats, StdUtils {
         if (actor.balance < m.stake) return;
 
         RPS.Move move = RPS.Move(bound(moveSeed, 1, 3));
-        bytes32 salt  = bytes32(saltSeed ^ uint256(uint160(actor)));
+        bytes32 salt = bytes32(saltSeed ^ uint256(uint160(actor)));
         bytes32 commitment = rps.commitHash(move, salt, actor);
 
         vm.prank(actor);
         try rps.joinMatch{value: m.stake}(id, commitment) {
-            mi.p2    = actor;
+            mi.p2 = actor;
             mi.move2 = move;
             mi.salt2 = salt;
             mi.joined = true;
@@ -1001,7 +996,7 @@ contract RPS_Handler is CommonBase, StdCheats, StdUtils {
         MatchInfo storage mi = info[id];
         RPS.Match memory m = rps.getMatch(id);
         if (m.state != RPS.MatchState.Created) return;
-        if (block.timestamp <= m.joinDeadline)  return;
+        if (block.timestamp <= m.joinDeadline) return;
 
         vm.prank(mi.p1);
         try rps.cancelMatch(id) {} catch {}
@@ -1046,11 +1041,11 @@ contract RPS_Handler is CommonBase, StdCheats, StdUtils {
 }
 
 contract RPS_Invariant_Test is StdInvariant, Test {
-    RPS         internal rps;
+    RPS internal rps;
     RPS_Handler internal handler;
 
     function setUp() public {
-        rps     = new RPS();
+        rps = new RPS();
         handler = new RPS_Handler(rps);
         targetContract(address(handler));
     }
@@ -1058,22 +1053,14 @@ contract RPS_Invariant_Test is StdInvariant, Test {
     /// The contract's ETH balance must always equal locked stakes + pending withdrawals.
     /// This is the core conservation invariant: no ETH is created or destroyed.
     function invariant_balanceEqualsLiabilities() public view {
-        uint256 locked  = handler.sumLockedStakes();
+        uint256 locked = handler.sumLockedStakes();
         uint256 pending = handler.sumPendingWithdrawals();
-        assertEq(
-            address(rps).balance,
-            locked + pending,
-            "balance != locked + pending"
-        );
+        assertEq(address(rps).balance, locked + pending, "balance != locked + pending");
     }
 
     /// Total ETH that entered the contract equals total that left plus what remains.
     function invariant_ethConserved() public view {
-        assertEq(
-            handler.ghost_deposited(),
-            handler.ghost_withdrawn() + address(rps).balance,
-            "ETH not conserved"
-        );
+        assertEq(handler.ghost_deposited(), handler.ghost_withdrawn() + address(rps).balance, "ETH not conserved");
     }
 
     /// No individual actor can have more pending than the total pot of any match.

@@ -1,5 +1,7 @@
 # Rock Paper Scissors — On-Chain Staked Matches
 
+[![CI](https://github.com/Amirhossein-Asadzadeh/onchain-rock-paper-scissors/actions/workflows/ci.yml/badge.svg)](https://github.com/Amirhossein-Asadzadeh/onchain-rock-paper-scissors/actions/workflows/ci.yml)
+
 A two-player, staked Rock-Paper-Scissors game on any EVM chain, using a
 commit-reveal scheme so neither player can see the other's move before committing.
 

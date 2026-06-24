@@ -41,65 +41,61 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract RockPaperScissors is ReentrancyGuard {
     // ── Types ────────────────────────────────────────────────────────────────
 
-    enum Move { None, Rock, Paper, Scissors }
+    enum Move {
+        None,
+        Rock,
+        Paper,
+        Scissors
+    }
 
     enum MatchState {
-        Created,    // P1 staked + committed; waiting for P2
-        Active,     // both committed; reveal window open
-        Revealing,  // first player revealed; second pending
-        Resolved,   // stakes paid out (win or tie)
-        Cancelled   // terminated; stakes refundable
+        Created, // P1 staked + committed; waiting for P2
+        Active, // both committed; reveal window open
+        Revealing, // first player revealed; second pending
+        Resolved, // stakes paid out (win or tie)
+        Cancelled // terminated; stakes refundable
     }
 
     struct Match {
-        address    player1;
-        address    player2;
-        uint256    stake;           // per player; total pot = 2 * stake
-        bytes32    commitment1;
-        bytes32    commitment2;
-        Move       move1;
-        Move       move2;
-        bool       revealed1;
-        bool       revealed2;
+        address player1;
+        address player2;
+        uint256 stake; // per player; total pot = 2 * stake
+        bytes32 commitment1;
+        bytes32 commitment2;
+        Move move1;
+        Move move2;
+        bool revealed1;
+        bool revealed2;
         MatchState state;
-        uint256    joinDeadline;    // P2 must join before this timestamp
-        uint256    revealDeadline;  // both must reveal before this timestamp
+        uint256 joinDeadline; // P2 must join before this timestamp
+        uint256 revealDeadline; // both must reveal before this timestamp
     }
 
     // ── Constants ────────────────────────────────────────────────────────────
 
-    uint256 public constant JOIN_TIMEOUT   = 24 hours;
+    uint256 public constant JOIN_TIMEOUT = 24 hours;
     uint256 public constant REVEAL_TIMEOUT = 24 hours;
 
     // ── Storage ──────────────────────────────────────────────────────────────
 
     uint256 private _matchCount;
 
-    mapping(uint256 => Match)   public matches;
+    mapping(uint256 => Match) public matches;
     mapping(address => uint256) public pendingWithdrawals;
 
     // ── Events ───────────────────────────────────────────────────────────────
 
-    event MatchCreated(
-        uint256 indexed matchId,
-        address indexed player1,
-        uint256         stake,
-        uint256         joinDeadline
-    );
-    event PlayerJoined(
-        uint256 indexed matchId,
-        address indexed player2,
-        uint256         revealDeadline
-    );
+    event MatchCreated(uint256 indexed matchId, address indexed player1, uint256 stake, uint256 joinDeadline);
+    event PlayerJoined(uint256 indexed matchId, address indexed player2, uint256 revealDeadline);
     // Move intentionally omitted from MoveRevealed — once one player reveals,
     // the other can see it on-chain, but there is no benefit in logging it a
     // second time before both are visible together in MatchResolved.
     event MoveRevealed(uint256 indexed matchId, address indexed player);
     event MatchResolved(
         uint256 indexed matchId,
-        address indexed winner,  // address(0) = tie
-        Move            move1,
-        Move            move2
+        address indexed winner, // address(0) = tie
+        Move move1,
+        Move move2
     );
     event MatchCancelled(uint256 indexed matchId);
     event Withdrawn(address indexed player, uint256 amount);
@@ -125,28 +121,24 @@ contract RockPaperScissors is ReentrancyGuard {
     /// @notice Create a new match.  The ETH sent becomes the required stake.
     /// @param  commitment  keccak256(abi.encodePacked(move, salt, msg.sender))
     /// @return matchId     Sequential ID for the new match.
-    function createMatch(bytes32 commitment)
-        external
-        payable
-        returns (uint256 matchId)
-    {
-        if (msg.value == 0)           revert WrongStake(msg.value, 1);
+    function createMatch(bytes32 commitment) external payable returns (uint256 matchId) {
+        if (msg.value == 0) revert WrongStake(msg.value, 1);
         if (commitment == bytes32(0)) revert ZeroCommitment();
 
         matchId = _matchCount++;
 
         // Writes happen before any external interaction — CEI compliant.
         matches[matchId] = Match({
-            player1:      msg.sender,
-            player2:      address(0),
-            stake:        msg.value,
-            commitment1:  commitment,
-            commitment2:  bytes32(0),
-            move1:        Move.None,
-            move2:        Move.None,
-            revealed1:    false,
-            revealed2:    false,
-            state:        MatchState.Created,
+            player1: msg.sender,
+            player2: address(0),
+            stake: msg.value,
+            commitment1: commitment,
+            commitment2: bytes32(0),
+            move1: Move.None,
+            move2: Move.None,
+            revealed1: false,
+            revealed2: false,
+            state: MatchState.Created,
             joinDeadline: block.timestamp + JOIN_TIMEOUT,
             revealDeadline: 0
         });
@@ -157,19 +149,19 @@ contract RockPaperScissors is ReentrancyGuard {
     /// @notice Join an open match.  Must send exactly the same stake as P1.
     /// @param  commitment  keccak256(abi.encodePacked(move, salt, msg.sender))
     function joinMatch(uint256 matchId, bytes32 commitment) external payable {
-        if (matchId >= _matchCount)               revert MatchNotFound(matchId);
+        if (matchId >= _matchCount) revert MatchNotFound(matchId);
         Match storage m = matches[matchId];
 
-        if (m.state != MatchState.Created)        revert WrongState(m.state);
-        if (block.timestamp > m.joinDeadline)     revert DeadlinePassed();
-        if (msg.sender == m.player1)              revert SelfPlay();
-        if (msg.value != m.stake)                 revert WrongStake(msg.value, m.stake);
-        if (commitment == bytes32(0))             revert ZeroCommitment();
+        if (m.state != MatchState.Created) revert WrongState(m.state);
+        if (block.timestamp > m.joinDeadline) revert DeadlinePassed();
+        if (msg.sender == m.player1) revert SelfPlay();
+        if (msg.value != m.stake) revert WrongStake(msg.value, m.stake);
+        if (commitment == bytes32(0)) revert ZeroCommitment();
 
         // Effects
-        m.player2       = msg.sender;
-        m.commitment2   = commitment;
-        m.state         = MatchState.Active;
+        m.player2 = msg.sender;
+        m.commitment2 = commitment;
+        m.state = MatchState.Active;
         m.revealDeadline = block.timestamp + REVEAL_TIMEOUT;
 
         emit PlayerJoined(matchId, msg.sender, m.revealDeadline);
@@ -178,14 +170,14 @@ contract RockPaperScissors is ReentrancyGuard {
     /// @notice Reveal your committed move.  Both players must call this within
     ///         REVEAL_TIMEOUT after P2 joined.  The second reveal settles the match.
     function reveal(uint256 matchId, Move move, bytes32 salt) external {
-        if (matchId >= _matchCount)   revert MatchNotFound(matchId);
+        if (matchId >= _matchCount) revert MatchNotFound(matchId);
         Match storage m = matches[matchId];
 
         if (m.state != MatchState.Active && m.state != MatchState.Revealing) {
             revert WrongState(m.state);
         }
         if (block.timestamp > m.revealDeadline) revert DeadlinePassed();
-        if (move == Move.None)                  revert InvalidMove();
+        if (move == Move.None) revert InvalidMove();
 
         bool isP1 = (msg.sender == m.player1);
         bool isP2 = (msg.sender == m.player2);
@@ -194,15 +186,17 @@ contract RockPaperScissors is ReentrancyGuard {
         // Verify the commitment and record the reveal — checks then effects.
         if (isP1) {
             if (m.revealed1) revert AlreadyRevealed();
-            if (keccak256(abi.encodePacked(move, salt, msg.sender)) != m.commitment1)
+            if (keccak256(abi.encodePacked(move, salt, msg.sender)) != m.commitment1) {
                 revert CommitMismatch();
-            m.move1     = move;
+            }
+            m.move1 = move;
             m.revealed1 = true;
         } else {
             if (m.revealed2) revert AlreadyRevealed();
-            if (keccak256(abi.encodePacked(move, salt, msg.sender)) != m.commitment2)
+            if (keccak256(abi.encodePacked(move, salt, msg.sender)) != m.commitment2) {
                 revert CommitMismatch();
-            m.move2     = move;
+            }
+            m.move2 = move;
             m.revealed2 = true;
         }
 
@@ -259,9 +253,9 @@ contract RockPaperScissors is ReentrancyGuard {
         if (matchId >= _matchCount) revert MatchNotFound(matchId);
         Match storage m = matches[matchId];
 
-        if (m.state != MatchState.Created)         revert WrongState(m.state);
-        if (msg.sender != m.player1)               revert NotPlayer1();
-        if (block.timestamp <= m.joinDeadline)     revert DeadlineNotPassed();
+        if (m.state != MatchState.Created) revert WrongState(m.state);
+        if (msg.sender != m.player1) revert NotPlayer1();
+        if (block.timestamp <= m.joinDeadline) revert DeadlineNotPassed();
 
         // Effects before any interaction.
         m.state = MatchState.Cancelled;
@@ -292,11 +286,7 @@ contract RockPaperScissors is ReentrancyGuard {
     }
 
     /// @notice Off-chain helper: compute the commitment hash a player should submit.
-    function commitHash(Move move, bytes32 salt, address player)
-        external
-        pure
-        returns (bytes32)
-    {
+    function commitHash(Move move, bytes32 salt, address player) external pure returns (bytes32) {
         return keccak256(abi.encodePacked(move, salt, player));
     }
 
@@ -327,16 +317,11 @@ contract RockPaperScissors is ReentrancyGuard {
 
     /// @dev Rock beats Scissors, Scissors beats Paper, Paper beats Rock.
     ///      Returns address(0) for a tie.
-    function _winner(Move m1, Move m2, address p1, address p2)
-        private
-        pure
-        returns (address)
-    {
+    function _winner(Move m1, Move m2, address p1, address p2) private pure returns (address) {
         if (m1 == m2) return address(0);
         if (
-            (m1 == Move.Rock     && m2 == Move.Scissors) ||
-            (m1 == Move.Scissors && m2 == Move.Paper)    ||
-            (m1 == Move.Paper    && m2 == Move.Rock)
+            (m1 == Move.Rock && m2 == Move.Scissors) || (m1 == Move.Scissors && m2 == Move.Paper)
+                || (m1 == Move.Paper && m2 == Move.Rock)
         ) return p1;
         return p2;
     }

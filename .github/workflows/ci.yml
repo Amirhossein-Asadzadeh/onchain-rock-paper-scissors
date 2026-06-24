@@ -1,0 +1,157 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CI for onchain-rock-paper-scissors
+#
+# Three parallel jobs: build+test, coverage, security scan.
+# All three must be green for a commit to be considered fully healthy.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+# Run on every push to any branch, and on every pull request targeting main.
+# Pull-request runs post status checks that GitHub can use as merge gates.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+# ── Global permissions ─────────────────────────────────────────────────────────
+# Least-privilege: read the repo, write nothing else.
+permissions:
+  contents: read
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 1 — Build & Test
+  #
+  # This is the core gate. If this fails, nothing else matters.
+  # ────────────────────────────────────────────────────────────────────────────
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      # submodules: recursive is REQUIRED here.
+      # lib/forge-std and lib/openzeppelin-contracts are git submodules.
+      # Without this flag, GitHub clones the outer repo only and leaves those
+      # directories empty, causing every import to fail at compile time.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── 2. Install Foundry ───────────────────────────────────────────────────
+      # The official action downloads forge/cast/anvil and adds them to PATH.
+      # It also caches the Foundry binaries by version hash, so subsequent runs
+      # skip the download entirely — typically saves 30-60 seconds per run.
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      # ── 3. Build ─────────────────────────────────────────────────────────────
+      # --sizes prints the bytecode size of each contract next to a 24 KB limit
+      # warning. Useful to catch size regressions before deploying.
+      - name: Build contracts
+        run: forge build --sizes
+
+      # ── 4. Format check ──────────────────────────────────────────────────────
+      # --check mode exits non-zero if any file would be changed by the formatter.
+      # This enforces a single canonical style in the repo without ever running
+      # "just format locally" manually. Run `forge fmt` locally before pushing.
+      - name: Check formatting
+        run: forge fmt --check
+
+      # ── 5. Tests ─────────────────────────────────────────────────────────────
+      # -vvv prints: test names, call traces on failure, revert reasons.
+      # The suite includes unit tests, fuzz tests (1 000 runs each), and
+      # invariant tests (256 runs × 64 depth).
+      - name: Run tests
+        run: forge test -vvv
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 2 — Coverage
+  #
+  # Separate job so coverage can be read independently from the test run.
+  # Forge coverage instruments the bytecode, which changes gas readings — that
+  # is why we don't merge this into the build-and-test job.
+  # ────────────────────────────────────────────────────────────────────────────
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    # Wait for the build job to pass before spending runner time on coverage.
+    # If the code doesn't compile, coverage would fail for a confusing reason.
+    needs: build-and-test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      # --report summary prints a table of Line / Statement / Branch / Function
+      # percentages per contract.  This appears in the Actions log; no upload
+      # to an external service is needed for a portfolio project.
+      - name: Generate coverage report
+        run: forge coverage --report summary
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 3 — Slither static analysis
+  #
+  # Slither is a Python-based static analyser that catches common Solidity
+  # vulnerabilities (reentrancy, integer issues, dangerous delegatecall, etc.)
+  # without executing any code.  It reads the AST and control-flow graph.
+  #
+  # We scan src/ only.  lib/ contains Foundry and OpenZeppelin source which
+  # we trust and which would produce a lot of noise.
+  # ────────────────────────────────────────────────────────────────────────────
+  slither:
+    name: Slither Analysis
+    runs-on: ubuntu-latest
+    # Run independently of the test job — static analysis is orthogonal to
+    # whether tests pass.  This way you see both results in parallel.
+
+    # Slither action needs slightly elevated permissions to annotate the PR
+    # with inline comments (if you later add sarif upload).
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Slither resolves imports via the same remappings Foundry uses, so it
+      # needs the submodules present and the foundry.toml remappings config.
+      - name: Install Foundry (for remappings resolution)
+        uses: foundry-rs/foundry-toolchain@v1
+
+      # ── Slither action ────────────────────────────────────────────────────────
+      # node-version: slither-action installs solc-select internally; Node is
+      # needed for certain helper scripts bundled with the action.
+      #
+      # target: "src/" — scan our contracts, not the dependencies in lib/.
+      #
+      # slither-args: "--foundry-ignore-compile" tells Slither to re-use the
+      # Foundry compilation artifacts from forge's cache rather than compiling
+      # again with its own compiler wrapper. This makes the scan faster and
+      # avoids version-mismatch errors.
+      #
+      # fail-on: "none" — Slither findings are REPORTED in the log but do NOT
+      # fail the CI job. Rationale: Slither often flags OpenZeppelin internals
+      # and intentional patterns (e.g. "block.timestamp used for comparison")
+      # as informational findings. We document the timestamp assumption in the
+      # contract already. Bumping this to "medium" or "high" once you have
+      # reviewed and suppressed known false-positives is a good next step.
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.1
+        with:
+          target: "src/"
+          node-version: "20"
+          slither-args: "--foundry-ignore-compile"
+          fail-on: "none"

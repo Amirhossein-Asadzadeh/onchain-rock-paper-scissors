@@ -157,7 +157,15 @@ jobs:
       - name: Run Slither
         uses: crytic/slither-action@v0.4.1
         with:
-          target: "src/"
+          # target must be "." (the project root) so crytic-compile can find
+          # foundry.toml and use the Foundry parsing path.  When target is
+          # "src/", crytic-compile searches for foundry.toml inside src/,
+          # finds nothing, falls back to Hardhat-like parsing, and crashes on
+          # the different JSON structure in out/build-info/ (KeyError: 'output').
+          target: "."
           node-version: "24"
-          slither-args: "--foundry-ignore-compile"
+          # --foundry-ignore-compile: reuse the out/ artifacts from forge build
+          # --filter-paths lib:       exclude lib/ (dependencies) from findings;
+          #                           equivalent to the old target:"src/" intent
+          slither-args: "--foundry-ignore-compile --filter-paths lib"
           fail-on: "none"

@@ -9,6 +9,10 @@ broadcast/
 !.env.example
 *.key
 
+# Frontend build artifacts
+node_modules/
+dist/
+
 # Editor / OS
 .DS_Store
 .vscode/

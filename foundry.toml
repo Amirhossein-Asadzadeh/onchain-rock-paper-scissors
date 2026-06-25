@@ -21,3 +21,13 @@ fail_on_revert = false
 [profile.ci]
 fuzz = { runs = 5000 }
 invariant = { runs = 512, depth = 128 }
+
+# ── Network endpoints ──────────────────────────────────────────────────────────
+# Values are env var references — never literal URLs or keys.
+[rpc_endpoints]
+sepolia = "${SEPOLIA_RPC_URL}"
+
+# ── Etherscan verification ────────────────────────────────────────────────────
+# chain = 11155111 is the Sepolia chain ID.
+[etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 11155111 }

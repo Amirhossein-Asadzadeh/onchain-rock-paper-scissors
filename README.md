@@ -177,6 +177,190 @@ src/RockPaperScissors.sol   99% lines · 97.5% statements · 100% functions
 
 ---
 
+## Deploying to Sepolia Testnet
+
+Sepolia is an EVM test network where you can deploy and interact with contracts
+using free, worthless ETH. No money is at risk.
+
+---
+
+### Background: what is a private key, and why a throwaway?
+
+Every Ethereum account is controlled by a **private key** — a random 256-bit
+number from which your wallet address is mathematically derived. Whoever holds
+the private key controls the account.
+
+When you deploy a contract, you sign the deployment transaction with your
+private key. Foundry's `vm.envUint("PRIVATE_KEY")` reads that key from your
+environment at deploy time — it never appears in any source file.
+
+**Why a dedicated throwaway wallet, not your real one?**
+
+- Testnet tooling (shell history, `.env` backups, CI logs) has many places a
+  private key can leak. If it's a throwaway with only testnet ETH, a leak is
+  harmless. If it's your real wallet, you lose real money.
+- Keeping testnet and mainnet wallets entirely separate is basic operational
+  security. Get into the habit now.
+
+---
+
+### Step 1 — Create a fresh throwaway wallet
+
+`cast wallet new` generates a new random key pair and prints both the address
+and the private key:
+
+```bash
+cast wallet new
+```
+
+Output looks like:
+
+```
+Successfully created new keypair.
+Address:     0xAbCd...1234
+Private key: 0xdeadbeef...
+```
+
+**Save the private key for the next steps, then discard it after experimenting.
+Never reuse this wallet for anything important.**
+
+---
+
+### Step 2 — Get free Sepolia ETH
+
+You need a small amount of Sepolia ETH to pay gas for the deployment
+transaction. It costs nothing real — it is testnet fuel.
+
+1. Copy the address printed by `cast wallet new`.
+2. Visit one of these faucets and paste your address:
+   - [sepoliafaucet.com](https://sepoliafaucet.com) (Alchemy, requires login)
+   - [faucet.sepolia.dev](https://faucet.sepolia.dev) (Google login)
+   - [infura.io/faucet/sepolia](https://www.infura.io/faucet/sepolia) (Infura)
+3. Verify the balance arrived (~30 seconds):
+   ```bash
+   cast balance YOUR_ADDRESS --rpc-url https://rpc.sepolia.org
+   ```
+   You should see something like `500000000000000000` (0.5 ETH in wei).
+
+---
+
+### Step 3 — Get a Sepolia RPC endpoint
+
+You need an HTTP URL that gives you access to a Sepolia node:
+
+| Provider | Free tier | Sign-up |
+|---|---|---|
+| Alchemy  | 300M compute units/month | [dashboard.alchemy.com](https://dashboard.alchemy.com) |
+| Infura   | 100k requests/day        | [app.infura.io](https://app.infura.io) |
+| Public   | Rate-limited, no sign-up | `https://rpc.sepolia.org` |
+
+After creating an app on Alchemy or Infura, copy the Sepolia HTTP URL — it
+looks like `https://eth-sepolia.g.alchemy.com/v2/xxxxxxxxxx`.
+
+---
+
+### Step 4 — Get an Etherscan API key
+
+Required for source code verification (Step 6). Free account at
+[etherscan.io/register](https://etherscan.io/register) → **API Keys** → **Add**.
+The same key works for both mainnet and Sepolia Etherscan.
+
+---
+
+### Step 5 — Fill in `.env`
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and replace the placeholders with your real values:
+
+```bash
+SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+PRIVATE_KEY=0xYOUR_THROWAWAY_PRIVATE_KEY
+ETHERSCAN_API_KEY=YOUR_ETHERSCAN_KEY
+```
+
+Confirm `.env` is git-ignored before proceeding — you only need to do this
+once:
+
+```bash
+grep '\.env' .gitignore    # should print ".env" and ".env.*"
+```
+
+---
+
+### Step 6 — Deploy and verify
+
+Load your env vars, then run the deployment script:
+
+```bash
+source .env
+
+forge script script/Deploy.s.sol \
+  --rpc-url sepolia \
+  --broadcast \
+  --verify \
+  -vvvv
+```
+
+**What each flag does:**
+
+| Flag | Meaning |
+|---|---|
+| `--rpc-url sepolia` | Looks up `sepolia` in `[rpc_endpoints]` in `foundry.toml`, which expands to `$SEPOLIA_RPC_URL` |
+| `--broadcast` | Actually submits the transaction on-chain. Without it, Foundry only dry-runs — nothing is deployed |
+| `--verify` | After deployment, submits your Solidity source to Etherscan so anyone can read and audit it |
+| `-vvvv` | Verbose — prints the full call trace so you can see exactly what happened |
+
+**What `--verify` does and why it matters for a portfolio project:**
+
+When you deploy compiled bytecode, anyone can see the bytecode on-chain but
+cannot read the original Solidity. `--verify` submits your source code to
+Etherscan, which recompiles it and confirms the bytecode matches. After
+verification, the contract page shows a green checkmark, the full source, and
+an interactive UI for calling functions — extremely useful for demonstrating
+the project to anyone reviewing your portfolio.
+
+Successful output ends with something like:
+
+```
+== Logs ==
+  RockPaperScissors deployed at: 0xAbCd...1234
+
+...
+Contract successfully verified.
+```
+
+---
+
+### Step 7 — Confirm on Sepolia Etherscan
+
+1. Open `https://sepolia.etherscan.io/address/0xYOUR_CONTRACT_ADDRESS`.
+2. The **Contract** tab should have a green checkmark ("Contract Source Code
+   Verified"), plus **Read Contract** and **Write Contract** tabs for live
+   interaction.
+3. Click **Write Contract** → connect MetaMask (Sepolia network) → call
+   `createMatch` to play a live on-chain game.
+
+---
+
+### Broadcast receipts
+
+Every `--broadcast` run writes a JSON receipt to `broadcast/`:
+
+```
+broadcast/
+  Deploy.s.sol/
+    11155111/          ← Sepolia chain ID
+      run-latest.json  ← deployed address, tx hash, block number
+```
+
+This directory is git-ignored. To share the deployed address, copy it from
+Forge's terminal output or from `run-latest.json`.
+
+---
+
 ## Commit-Reveal Reference
 
 ```solidity

@@ -3,9 +3,10 @@ out/
 cache/
 broadcast/
 
-# Secrets
+# Secrets — ignore all .env files except the documented example template
 .env
 .env.*
+!.env.example
 *.key
 
 # Editor / OS
